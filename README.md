@@ -1,4 +1,4 @@
-<h1>Peaks Browser is a Python and PyQt5 based browser</h1>
+<h1>Peaks Browser is a lightweight Python and PyQt5 based browser</h1>
 
 <h2>To ensure you can run the browser run</h2>
 
