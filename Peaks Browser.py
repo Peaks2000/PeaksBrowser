@@ -18,19 +18,16 @@ class Browser(QWidget):
         self.default_new_tab_url = "https://www.peaks2000.com"
         self.custom_new_tab_url = ""
 
-        # Set up the tab widget
         self.tabs = QTabWidget()
         self.tabs.setTabsClosable(True)
         self.tabs.tabCloseRequested.connect(self.close_current_tab)
         self.tabs.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tabs.customContextMenuRequested.connect(self.show_tab_context_menu)
 
-        # Set up the URL bar
         self.url_bar = QLineEdit()
         self.url_bar.returnPressed.connect(self.navigate_to_url)
         self.url_bar.setStyleSheet("border: 1px solid #555; border-radius: 10px; padding: 5px;")
 
-        # Set up buttons and layouts (with smaller buttons)
         button_size = QSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
         self.new_tab_button = self.create_button("+", self.add_new_tab)
@@ -39,7 +36,6 @@ class Browser(QWidget):
         self.find_button = self.create_button("🔍", self.open_find_dialog)
         self.settings_button = self.create_button("⚙️", self.open_settings_dialog)
 
-        # Layout for navigation bar
         nav_bar = QHBoxLayout()
         nav_bar.addWidget(self.url_bar)
         nav_bar.addWidget(self.new_tab_button)
@@ -53,10 +49,8 @@ class Browser(QWidget):
         layout.addWidget(self.tabs)
         self.setLayout(layout)
 
-        # Start with a new tab
         self.add_new_tab()
 
-        # Add shortcuts
         QShortcut(Qt.CTRL + Qt.Key_R, self).activated.connect(self.refresh_page)
         QShortcut(Qt.CTRL + Qt.Key_T, self).activated.connect(self.add_new_tab)
         QShortcut(Qt.CTRL + Qt.Key_W, self).activated.connect(self.close_current_tab)
@@ -64,7 +58,6 @@ class Browser(QWidget):
         QShortcut(Qt.Key_F11, self).activated.connect(self.toggle_fullscreen)
         QShortcut(Qt.CTRL + Qt.Key_F, self).activated.connect(self.open_find_dialog)
 
-        # Apply styles for tabs
         self.tabs.setStyleSheet("""
             QTabWidget::pane { border: 0; } /* No border around tabs */
             QTabBar::tab { 
@@ -106,7 +99,6 @@ class Browser(QWidget):
         if url is None:
             url = self.default_new_tab_url if not self.custom_new_tab_url else self.custom_new_tab_url
 
-        # Make sure the URL is a string
         if not isinstance(url, str):
             url = self.default_new_tab_url
 
@@ -155,7 +147,6 @@ class Browser(QWidget):
         current_tab_name = self.tabs.tabText(index)
         new_name, ok = QInputDialog.getText(self, "Rename Tab", "New name:", text=current_tab_name)
         if ok and new_name:
-            # Enforce character limit of 20 for tab titles
             limited_name = new_name if len(new_name) <= 20 else new_name[:20] + "..."
             self.tabs.setTabText(index, limited_name)
             self.manual_tab_names[index] = limited_name
@@ -183,7 +174,6 @@ class Browser(QWidget):
     def open_settings_dialog(self):
         dialog = SettingsDialog(self)
         if dialog.exec_():
-            # Apply settings
             self.dark_mode = dialog.dark_mode_checkbox.isChecked()
             self.custom_new_tab_url = dialog.custom_url_input.text()
 
@@ -198,7 +188,6 @@ class Browser(QWidget):
         self.setPalette(dark_palette)
         self.setStyleSheet("background-color: #222; color: white;")
 
-        # Change button colors for dark mode
         button_style = """
             background-color: transparent; 
             color: white;  
@@ -213,7 +202,6 @@ class Browser(QWidget):
         self.setPalette(QApplication.style().standardPalette())
         self.setStyleSheet("")
 
-        # Change button colors back for light mode
         button_style = """
             background-color: transparent; 
             color: inherit;  
