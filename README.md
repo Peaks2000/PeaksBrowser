@@ -2,7 +2,7 @@
 
 <h2>To ensure you can run the browser run</h2>
 
-`pip install python`
+`pip install PyQt5`
 
 <h1>Features:</h1>
 
