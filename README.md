@@ -22,3 +22,7 @@ Dark and light modes
 Text finding( not finished )
 
 fullscreen mode
+
+works on every os
+
+written in python
