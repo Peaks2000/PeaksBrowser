@@ -1,7 +1,7 @@
 <h1>Peaks Browser is a lightweight Python and PyQt5 based browser</h1>
 
 
-<h1>⚠️PeaksBrowser is being remade in C</h1>
+<h1>⚠️PeaksBrowser is being remade in C⚠️</h1>
 
 <h2>You must have dependencies installed unless your running the compiled exe</h2>
 
