@@ -22,6 +22,8 @@ Text finding( not finished )
 
 fullscreen mode
 
+Downloads
+
 works on every os
 
 written in python
