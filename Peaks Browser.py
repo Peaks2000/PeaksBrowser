@@ -4,10 +4,11 @@ from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget, QLineEdit,
     QPushButton, QSizePolicy, QMenu, QAction, QInputDialog, QDialog,
     QLabel, QDialogButtonBox, QCheckBox, QFileDialog, QProgressBar,
-    QScrollArea
+    QScrollArea, QShortcut
 )
 from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEngineProfile
 from PyQt5.QtCore import QUrl, Qt, QCoreApplication, QSettings
+from PyQt5.QtGui import QKeySequence
 
 QCoreApplication.setAttribute(Qt.AA_EnableHighDpiScaling)
 
@@ -78,6 +79,13 @@ class Browser(QWidget):
         if self.dark_mode:
             self.apply_dark_mode()
 
+        # Add Ctrl+T for new tab and Ctrl+W for close tab shortcuts
+        self.shortcut_new_tab = QShortcut(QKeySequence("Ctrl+T"), self)
+        self.shortcut_new_tab.activated.connect(self.add_tab)
+
+        self.shortcut_close_tab = QShortcut(QKeySequence("Ctrl+W"), self)
+        self.shortcut_close_tab.activated.connect(self.close_current_tab)
+
     def init_profile(self):
         profile = QWebEngineProfile.defaultProfile()
         profile.setPersistentCookiesPolicy(QWebEngineProfile.ForcePersistentCookies)
@@ -94,24 +102,43 @@ class Browser(QWidget):
         self.tabs.tabCloseRequested.connect(self.close_tab)
         self.tabs.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tabs.customContextMenuRequested.connect(self.show_tab_menu)
+        
         self.url_bar = QLineEdit()
         self.url_bar.returnPressed.connect(self.load_url)
         self.url_bar.setStyleSheet("border:1px solid #555; border-radius:10px; padding:5px;")
+        
         self.new_tab_btn = self.make_button("+", self.add_tab)
         self.refresh_btn = self.make_button("↻", self.refresh)
         self.fullscreen_btn = self.make_button("⛶", self.toggle_fullscreen)
         self.find_btn = self.make_button("🔍", self.find_text)
         self.download_btn = self.make_button("⬇️", self.open_downloads)
         self.settings_btn = self.make_button("⚙️", self.open_settings)
+
         nav = QHBoxLayout()
         nav.addWidget(self.url_bar)
         for btn in [self.new_tab_btn, self.refresh_btn, self.fullscreen_btn, self.find_btn, self.download_btn, self.settings_btn]:
             nav.addWidget(btn)
+
         layout = QVBoxLayout()
         layout.addLayout(nav)
         layout.addWidget(self.tabs)
         self.setLayout(layout)
+
         self.add_tab()
+
+        # F11 shortcut for fullscreen toggle
+        self.shortcut_fullscreen = QAction(self)
+        self.shortcut_fullscreen.setShortcut("F11")
+        self.shortcut_fullscreen.triggered.connect(self.toggle_fullscreen)
+        self.addAction(self.shortcut_fullscreen)
+
+        # Ctrl+R shortcut for refreshing the page
+        self.shortcut_refresh = QShortcut(QKeySequence("Ctrl+R"), self)
+        self.shortcut_refresh.activated.connect(self.refresh)
+
+        # Ctrl+F shortcut for Find
+        self.shortcut_find = QShortcut(QKeySequence("Ctrl+F"), self)
+        self.shortcut_find.activated.connect(self.find_text)
 
     def make_button(self, text, handler):
         btn = QPushButton(text)
@@ -134,6 +161,11 @@ class Browser(QWidget):
 
     def close_tab(self, idx):
         self.tabs.removeTab(idx)
+
+    def close_current_tab(self):
+        current_index = self.tabs.currentIndex()
+        if current_index != -1:
+            self.tabs.removeTab(current_index)
 
     def show_tab_menu(self, pos):
         idx = self.tabs.tabBar().tabAt(pos)
@@ -166,8 +198,14 @@ class Browser(QWidget):
     def toggle_fullscreen(self):
         if self.isFullScreen():
             self.showNormal()
+            self.url_bar.show()
+            for btn in [self.new_tab_btn, self.refresh_btn, self.fullscreen_btn, self.find_btn, self.download_btn, self.settings_btn]:
+                btn.show()
         else:
             self.showFullScreen()
+            self.url_bar.hide()
+            for btn in [self.new_tab_btn, self.refresh_btn, self.fullscreen_btn, self.find_btn, self.download_btn, self.settings_btn]:
+                btn.hide()
 
     def find_text(self):
         text, ok = QInputDialog.getText(self, "Find", "Find:")
@@ -235,6 +273,20 @@ class Browser(QWidget):
             "QTabBar::tab:selected{background:#c0c0c0; color:black;}"
             "QTabBar::tab:hover{background:#d0d0d0;}"
         )
+
+    def mouseMoveEvent(self, event):
+        if self.isFullScreen():
+            if event.pos().y() <= 5:  # If mouse is near top (5 pixels)
+                self.url_bar.show()
+                for btn in [self.new_tab_btn, self.refresh_btn, self.fullscreen_btn, self.find_btn, self.download_btn, self.settings_btn]:
+                    btn.show()
+                self.tabs.tabBar().show()
+            else:
+                self.url_bar.hide()
+                for btn in [self.new_tab_btn, self.refresh_btn, self.fullscreen_btn, self.find_btn, self.download_btn, self.settings_btn]:
+                    btn.hide()
+                self.tabs.tabBar().hide()
+        super().mouseMoveEvent(event)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
