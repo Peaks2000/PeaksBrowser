@@ -1,6 +1,5 @@
 import sys
 import os
-
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget, QLineEdit,
     QPushButton, QSizePolicy, QMenu, QAction, QInputDialog, QDialog,
@@ -10,6 +9,8 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEngineProfile
 from PyQt5.QtCore import QUrl, Qt, QCoreApplication, QSettings
 
+QCoreApplication.setAttribute(Qt.AA_EnableHighDpiScaling)
+
 class DownloadItemRow(QWidget):
     def __init__(self, download):
         super().__init__()
@@ -18,13 +19,11 @@ class DownloadItemRow(QWidget):
         self.progress = QProgressBar()
         self.cancel_button = QPushButton("Cancel")
         self.cancel_button.clicked.connect(self.cancel_download)
-
         layout = QHBoxLayout()
         layout.addWidget(self.label)
         layout.addWidget(self.progress)
         layout.addWidget(self.cancel_button)
         self.setLayout(layout)
-
         download.downloadProgress.connect(self.update_progress)
         download.finished.connect(self.finish_download)
 
@@ -52,14 +51,12 @@ class DownloadManagerDialog(QDialog):
         self.setWindowTitle("Downloads")
         self.resize(600, 300)
         self.layout = QVBoxLayout(self)
-
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
         container = QWidget()
         self.container_layout = QVBoxLayout(container)
         self.scroll.setWidget(container)
         self.layout.addWidget(self.scroll)
-
         self.button_box = QDialogButtonBox(QDialogButtonBox.Close)
         self.button_box.rejected.connect(self.close)
         self.layout.addWidget(self.button_box)
@@ -71,16 +68,13 @@ class DownloadManagerDialog(QDialog):
 class Browser(QWidget):
     def __init__(self):
         super().__init__()
-        QCoreApplication.setAttribute(Qt.AA_EnableHighDpiScaling)
         self.setWindowTitle("Peaks Browser")
         self.settings = QSettings("Peaks2000", "PeaksBrowser")
         self.dark_mode = self.settings.value("dark_mode", False, type=bool)
         self.custom_url = self.settings.value("custom_new_tab_url", "", type=str)
-
         self.download_dialog = DownloadManagerDialog(self)
         self.init_profile()
         self.init_ui()
-
         if self.dark_mode:
             self.apply_dark_mode()
 
@@ -100,29 +94,23 @@ class Browser(QWidget):
         self.tabs.tabCloseRequested.connect(self.close_tab)
         self.tabs.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tabs.customContextMenuRequested.connect(self.show_tab_menu)
-
         self.url_bar = QLineEdit()
         self.url_bar.returnPressed.connect(self.load_url)
         self.url_bar.setStyleSheet("border:1px solid #555; border-radius:10px; padding:5px;")
-
         self.new_tab_btn = self.make_button("+", self.add_tab)
         self.refresh_btn = self.make_button("↻", self.refresh)
         self.fullscreen_btn = self.make_button("⛶", self.toggle_fullscreen)
         self.find_btn = self.make_button("🔍", self.find_text)
         self.download_btn = self.make_button("⬇️", self.open_downloads)
         self.settings_btn = self.make_button("⚙️", self.open_settings)
-
         nav = QHBoxLayout()
         nav.addWidget(self.url_bar)
-        for btn in [self.new_tab_btn, self.refresh_btn, self.fullscreen_btn,
-                    self.find_btn, self.download_btn, self.settings_btn]:
+        for btn in [self.new_tab_btn, self.refresh_btn, self.fullscreen_btn, self.find_btn, self.download_btn, self.settings_btn]:
             nav.addWidget(btn)
-
         layout = QVBoxLayout()
         layout.addLayout(nav)
         layout.addWidget(self.tabs)
         self.setLayout(layout)
-
         self.add_tab()
 
     def make_button(self, text, handler):
@@ -136,6 +124,8 @@ class Browser(QWidget):
     def add_tab(self, url=None):
         if url is None:
             url = self.custom_url or "https://www.peaks2000.com"
+        if not isinstance(url, str):
+            url = str(url)
         view = QWebEngineView()
         view.setUrl(QUrl(url))
         idx = self.tabs.addTab(view, "New Tab")
@@ -199,21 +189,17 @@ class Browser(QWidget):
         dlg.setWindowTitle("Settings")
         dlg.setFixedSize(300, 150)
         layout = QVBoxLayout(dlg)
-
         dark_cb = QCheckBox("Enable Dark Mode")
         dark_cb.setChecked(self.dark_mode)
         url_label = QLabel("Custom New Tab URL:")
         url_input = QLineEdit(self.custom_url)
-
         box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         box.accepted.connect(dlg.accept)
         box.rejected.connect(dlg.reject)
-
         layout.addWidget(dark_cb)
         layout.addWidget(url_label)
         layout.addWidget(url_input)
         layout.addWidget(box)
-
         if dlg.exec_():
             self.dark_mode = dark_cb.isChecked()
             self.custom_url = url_input.text()
@@ -226,9 +212,7 @@ class Browser(QWidget):
 
     def apply_dark_mode(self):
         self.setStyleSheet("background-color:#222; color:white;")
-        self.url_bar.setStyleSheet(
-            "border:1px solid #555; border-radius:10px; padding:5px; color:white; background:#333;"
-        )
+        self.url_bar.setStyleSheet("border:1px solid #555; border-radius:10px; padding:5px; color:white; background:#333;")
         for btn in [self.new_tab_btn, self.refresh_btn, self.fullscreen_btn, self.find_btn, self.download_btn, self.settings_btn]:
             btn.setStyleSheet("background:transparent; border:none; font-size:16px; color:white;")
         self.tabs.setStyleSheet(
@@ -240,9 +224,7 @@ class Browser(QWidget):
 
     def remove_dark_mode(self):
         self.setStyleSheet("")
-        self.url_bar.setStyleSheet(
-            "border:1px solid #555; border-radius:10px; padding:5px; color:black; background:white;"
-        )
+        self.url_bar.setStyleSheet("border:1px solid #555; border-radius:10px; padding:5px; color:black; background:white;")
         for btn in [self.new_tab_btn, self.refresh_btn, self.fullscreen_btn, self.find_btn, self.download_btn, self.settings_btn]:
             btn.setStyleSheet("background:transparent; border:none; font-size:16px; color:inherit;")
         self.tabs.setStyleSheet(
@@ -258,4 +240,3 @@ if __name__ == '__main__':
     browser = Browser()
     browser.show()
     sys.exit(app.exec_())
-
