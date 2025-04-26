@@ -159,7 +159,9 @@ class Browser(QWidget):
         self.tabs.currentWidget().setUrl(QUrl(url))
 
     def refresh(self):
-        self.tabs.currentWidget().reload()
+        current_widget = self.tabs.currentWidget()
+        if isinstance(current_widget, QWebEngineView):
+            current_widget.reload()
 
     def toggle_fullscreen(self):
         if self.isFullScreen():
