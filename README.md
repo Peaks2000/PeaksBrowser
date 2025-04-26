@@ -21,9 +21,9 @@ Dark and light modes
 
 Text finding( not finished )
 
-fullscreen mode
-
 Downloads
+
+Download Manager
 
 works on every os
 
