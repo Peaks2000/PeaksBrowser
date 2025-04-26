@@ -2,34 +2,13 @@ import sys
 import os
 
 from PyQt5.QtWidgets import (
-    QApplication,
-    QVBoxLayout,
-    QHBoxLayout,
-    QWidget,
-    QTabWidget,
-    QLineEdit,
-    QPushButton,
-    QSizePolicy,
-    QMenu,
-    QAction,
-    QInputDialog,
-    QDialog,
-    QLabel,
-    QDialogButtonBox,
-    QCheckBox,
-    QFileDialog,
-    QProgressBar,
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget, QLineEdit,
+    QPushButton, QSizePolicy, QMenu, QAction, QInputDialog, QDialog,
+    QLabel, QDialogButtonBox, QCheckBox, QFileDialog, QProgressBar,
     QScrollArea
 )
-
-from PyQt5.QtWebEngineWidgets import (
-    QWebEngineView,
-    QWebEnginePage,
-    QWebEngineProfile
-)
-
-from PyQt5.QtCore import QUrl, Qt, QCoreApplication
-
+from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEngineProfile
+from PyQt5.QtCore import QUrl, Qt, QCoreApplication, QSettings
 
 class DownloadItemRow(QWidget):
     def __init__(self, download):
@@ -38,7 +17,7 @@ class DownloadItemRow(QWidget):
         self.label = QLabel(os.path.basename(download.path()))
         self.progress = QProgressBar()
         self.cancel_button = QPushButton("Cancel")
-        self.cancel_button.clicked.connect(self.download.cancel)
+        self.cancel_button.clicked.connect(self.cancel_download)
 
         layout = QHBoxLayout()
         layout.addWidget(self.label)
@@ -46,232 +25,237 @@ class DownloadItemRow(QWidget):
         layout.addWidget(self.cancel_button)
         self.setLayout(layout)
 
-        download.downloadProgress.connect(self.on_progress)
-        download.finished.connect(self.on_finished)
+        download.downloadProgress.connect(self.update_progress)
+        download.finished.connect(self.finish_download)
 
-    def on_progress(self, received, total):
+    def update_progress(self, received, total):
         if total > 0:
             self.progress.setValue(int(received * 100 / total))
 
-    def on_finished(self):
+    def finish_download(self):
         self.cancel_button.setDisabled(True)
 
+    def cancel_download(self):
+        self.download.cancel()
+        path = self.download.path()
+        if os.path.exists(path):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+        self.setParent(None)
+        self.deleteLater()
 
 class DownloadManagerDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Downloads")
         self.resize(600, 300)
+        self.layout = QVBoxLayout(self)
 
-        layout = QVBoxLayout(self)
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
         container = QWidget()
         self.container_layout = QVBoxLayout(container)
-        scroll.setWidget(container)
-        layout.addWidget(scroll)
+        self.scroll.setWidget(container)
+        self.layout.addWidget(self.scroll)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Close)
-        buttons.rejected.connect(self.close)
-        layout.addWidget(buttons)
+        self.button_box = QDialogButtonBox(QDialogButtonBox.Close)
+        self.button_box.rejected.connect(self.close)
+        self.layout.addWidget(self.button_box)
 
     def add_download(self, download):
         row = DownloadItemRow(download)
         self.container_layout.addWidget(row)
 
-
 class Browser(QWidget):
     def __init__(self):
         super().__init__()
+        QCoreApplication.setAttribute(Qt.AA_EnableHighDpiScaling)
         self.setWindowTitle("Peaks Browser")
-        self.is_fullscreen = False
-        self.manual_tab_names = {}
-        self.dark_mode = False
-        self.default_new_tab_url = "https://www.peaks2000.com"
-        self.custom_new_tab_url = ""
-        self.download_dialog = DownloadManagerDialog(self)
+        self.settings = QSettings("Peaks2000", "PeaksBrowser")
+        self.dark_mode = self.settings.value("dark_mode", False, type=bool)
+        self.custom_url = self.settings.value("custom_new_tab_url", "", type=str)
 
+        self.download_dialog = DownloadManagerDialog(self)
+        self.init_profile()
+        self.init_ui()
+
+        if self.dark_mode:
+            self.apply_dark_mode()
+
+    def init_profile(self):
+        profile = QWebEngineProfile.defaultProfile()
+        profile.setPersistentCookiesPolicy(QWebEngineProfile.ForcePersistentCookies)
+        storage = os.path.join(os.getcwd(), "web_profile")
+        os.makedirs(storage, exist_ok=True)
+        profile.setPersistentStoragePath(storage)
+        profile.setCachePath(storage)
+        profile.setHttpCacheType(QWebEngineProfile.DiskHttpCache)
+        profile.downloadRequested.connect(self.handle_download)
+
+    def init_ui(self):
         self.tabs = QTabWidget()
         self.tabs.setTabsClosable(True)
-        self.tabs.tabCloseRequested.connect(self.close_current_tab)
+        self.tabs.tabCloseRequested.connect(self.close_tab)
         self.tabs.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.tabs.customContextMenuRequested.connect(self.show_tab_context_menu)
+        self.tabs.customContextMenuRequested.connect(self.show_tab_menu)
 
         self.url_bar = QLineEdit()
-        self.url_bar.returnPressed.connect(self.navigate_to_url)
-        self.url_bar.setStyleSheet(
-            "border: 1px solid #555; border-radius: 10px; padding: 5px;"
-        )
+        self.url_bar.returnPressed.connect(self.load_url)
+        self.url_bar.setStyleSheet("border:1px solid #555; border-radius:10px; padding:5px;")
 
-        self.new_tab_button = self.create_button("+", self.add_new_tab)
-        self.refresh_button = self.create_button("↻", self.refresh_page)
-        self.fullscreen_button = self.create_button("⛶", self.toggle_fullscreen)
-        self.find_button = self.create_button("🔍", self.open_find_dialog)
-        self.download_button = self.create_button("⬇️", self.open_downloads_dialog)
-        self.settings_button = self.create_button("⚙️", self.open_settings_dialog)
+        self.new_tab_btn = self.make_button("+", self.add_tab)
+        self.refresh_btn = self.make_button("↻", self.refresh)
+        self.fullscreen_btn = self.make_button("⛶", self.toggle_fullscreen)
+        self.find_btn = self.make_button("🔍", self.find_text)
+        self.download_btn = self.make_button("⬇️", self.open_downloads)
+        self.settings_btn = self.make_button("⚙️", self.open_settings)
 
-        nav_bar = QHBoxLayout()
-        nav_bar.addWidget(self.url_bar)
-        nav_bar.addWidget(self.new_tab_button)
-        nav_bar.addWidget(self.refresh_button)
-        nav_bar.addWidget(self.fullscreen_button)
-        nav_bar.addWidget(self.find_button)
-        nav_bar.addWidget(self.download_button)
-        nav_bar.addWidget(self.settings_button)
+        nav = QHBoxLayout()
+        nav.addWidget(self.url_bar)
+        for btn in [self.new_tab_btn, self.refresh_btn, self.fullscreen_btn,
+                    self.find_btn, self.download_btn, self.settings_btn]:
+            nav.addWidget(btn)
 
         layout = QVBoxLayout()
-        layout.addLayout(nav_bar)
+        layout.addLayout(nav)
         layout.addWidget(self.tabs)
         self.setLayout(layout)
 
-        self.add_new_tab()
-        profile = QWebEngineProfile.defaultProfile()
-        profile.downloadRequested.connect(self.handle_download)
+        self.add_tab()
 
-    def create_button(self, text, on_click):
+    def make_button(self, text, handler):
         btn = QPushButton(text)
-        btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         btn.setFixedSize(30, 30)
-        btn.clicked.connect(on_click)
-        btn.setStyleSheet(
-            "background-color: transparent; color: inherit; border-radius: 10px; font-size: 16px; border: none;"
-        )
+        btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        btn.clicked.connect(handler)
+        btn.setStyleSheet("background:transparent; border:none; font-size:16px;")
         return btn
 
-    def add_new_tab(self, url=None):
+    def add_tab(self, url=None):
         if url is None:
-            url = self.default_new_tab_url if not self.custom_new_tab_url else self.custom_new_tab_url
-        view = CustomWebEngineView(self)
+            url = self.custom_url or "https://www.peaks2000.com"
+        view = QWebEngineView()
         view.setUrl(QUrl(url))
         idx = self.tabs.addTab(view, "New Tab")
         self.tabs.setCurrentIndex(idx)
-        view.titleChanged.connect(lambda title, i=idx: self.update_tab_title(i, title))
+        view.titleChanged.connect(lambda title: self.tabs.setTabText(idx, title[:20] + '...' if len(title) > 20 else title))
 
-    def update_tab_title(self, idx, title):
-        if idx not in self.manual_tab_names:
-            short = title if len(title) <= 20 else title[:20] + "..."
-            self.tabs.setTabText(idx, short)
+    def close_tab(self, idx):
+        self.tabs.removeTab(idx)
 
-    def navigate_to_url(self):
-        url = self.url_bar.text()
-        if not url.startswith(("http://", "https://")):
-            url = "http://" + url
-        self.tabs.currentWidget().setUrl(QUrl(url))
-
-    def refresh_page(self):
-        self.tabs.currentWidget().reload()
-
-    def close_current_tab(self, index=None):
-        if index is None:
-            index = self.tabs.currentIndex()
-        if index != -1:
-            self.manual_tab_names.pop(index, None)
-            self.tabs.removeTab(index)
-
-    def show_tab_context_menu(self, pos):
+    def show_tab_menu(self, pos):
         idx = self.tabs.tabBar().tabAt(pos)
-        if idx != -1:
-            menu = QMenu(self)
-            act = QAction("Rename Tab", self)
-            act.triggered.connect(lambda: self.rename_tab(idx))
-            menu.addAction(act)
-            menu.exec_(self.tabs.mapToGlobal(pos))
+        if idx == -1:
+            return
+        menu = QMenu(self)
+        rename = QAction("Rename Tab", self)
+        rename.triggered.connect(lambda: self.rename_tab(idx))
+        menu.addAction(rename)
+        menu.exec_(self.tabs.mapToGlobal(pos))
 
     def rename_tab(self, idx):
-        curr = self.tabs.tabText(idx)
-        new, ok = QInputDialog.getText(self, "Rename Tab", "New name:", text=curr)
-        if ok and new:
-            short = new if len(new) <= 20 else new[:20] + "..."
-            self.tabs.setTabText(idx, short)
-            self.manual_tab_names[idx] = short
+        current = self.tabs.tabText(idx)
+        text, ok = QInputDialog.getText(self, "Rename Tab", "Tab name:", text=current)
+        if ok:
+            name = text[:20] + '...' if len(text) > 20 else text
+            self.tabs.setTabText(idx, name)
 
-    def switch_to_next_tab(self):
-        nxt = (self.tabs.currentIndex() + 1) % self.tabs.count()
-        self.tabs.setCurrentIndex(nxt)
+    def load_url(self):
+        url = self.url_bar.text()
+        if not url.startswith(('http://', 'https://')):
+            url = 'http://' + url
+        self.tabs.currentWidget().setUrl(QUrl(url))
+
+    def refresh(self):
+        self.tabs.currentWidget().reload()
 
     def toggle_fullscreen(self):
-        if self.is_fullscreen:
-            self.showNormal(); self.fullscreen_button.setText("⛶")
+        if self.isFullScreen():
+            self.showNormal()
         else:
-            self.showFullScreen(); self.fullscreen_button.setText("🞬")
-        self.is_fullscreen = not self.is_fullscreen
+            self.showFullScreen()
 
-    def open_find_dialog(self):
-        cur = self.tabs.currentWidget()
-        if isinstance(cur, CustomWebEngineView):
-            FindDialog(self, cur).exec_()
+    def find_text(self):
+        text, ok = QInputDialog.getText(self, "Find", "Find:")
+        if ok:
+            self.tabs.currentWidget().findText(text)
 
-    def open_settings_dialog(self):
-        SettingsDialog(self).exec_()
-
-    def open_downloads_dialog(self):
+    def open_downloads(self):
         self.download_dialog.show()
 
     def handle_download(self, download):
-        suggested = os.path.basename(download.url().path())
-        path, _ = QFileDialog.getSaveFileName(self, "Save File", suggested)
+        fname = os.path.basename(download.url().path())
+        path, _ = QFileDialog.getSaveFileName(self, "Save File", fname)
         if path:
             download.setPath(path)
             download.accept()
             self.download_dialog.add_download(download)
             self.download_dialog.show()
 
+    def open_settings(self):
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Settings")
+        dlg.setFixedSize(300, 150)
+        layout = QVBoxLayout(dlg)
 
-class CustomWebEngineView(QWebEngineView):
-    def __init__(self, browser, parent=None):
-        super().__init__(parent)
-        self.browser = browser
-        self.setPage(CustomWebEnginePage(self))
-        self.setMinimumSize(800, 600)
+        dark_cb = QCheckBox("Enable Dark Mode")
+        dark_cb.setChecked(self.dark_mode)
+        url_label = QLabel("Custom New Tab URL:")
+        url_input = QLineEdit(self.custom_url)
 
+        box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        box.accepted.connect(dlg.accept)
+        box.rejected.connect(dlg.reject)
 
-class CustomWebEnginePage(QWebEnginePage):
-    def __init__(self, web_view):
-        super().__init__(web_view)
+        layout.addWidget(dark_cb)
+        layout.addWidget(url_label)
+        layout.addWidget(url_input)
+        layout.addWidget(box)
 
+        if dlg.exec_():
+            self.dark_mode = dark_cb.isChecked()
+            self.custom_url = url_input.text()
+            self.settings.setValue("dark_mode", self.dark_mode)
+            self.settings.setValue("custom_new_tab_url", self.custom_url)
+            if self.dark_mode:
+                self.apply_dark_mode()
+            else:
+                self.remove_dark_mode()
 
-class FindDialog(QDialog):
-    def __init__(self, parent, web_view):
-        super().__init__(parent)
-        self.web_view = web_view
-        self.setWindowTitle("Find")
-        self.setFixedSize(300, 100)
-        self.label = QLabel("Find:")
-        self.find_input = QLineEdit()
-        self.find_input.textChanged.connect(self.web_view.findText)
-        self.button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        self.button_box.accepted.connect(self.accept)
-        self.button_box.rejected.connect(self.reject)
-        layout = QVBoxLayout()
-        layout.addWidget(self.label)
-        layout.addWidget(self.find_input)
-        layout.addWidget(self.button_box)
-        self.setLayout(layout)
+    def apply_dark_mode(self):
+        self.setStyleSheet("background-color:#222; color:white;")
+        self.url_bar.setStyleSheet(
+            "border:1px solid #555; border-radius:10px; padding:5px; color:white; background:#333;"
+        )
+        for btn in [self.new_tab_btn, self.refresh_btn, self.fullscreen_btn, self.find_btn, self.download_btn, self.settings_btn]:
+            btn.setStyleSheet("background:transparent; border:none; font-size:16px; color:white;")
+        self.tabs.setStyleSheet(
+            "QTabWidget::pane{border:0;}"
+            "QTabBar::tab{border:1px solid #555; border-radius:10px; margin:5px; padding:10px; background:#444; color:white;}"
+            "QTabBar::tab:selected{background:#666; color:white;}"
+            "QTabBar::tab:hover{background:#555;}"
+        )
 
-
-class SettingsDialog(QDialog):
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.setWindowTitle("Settings")
-        self.setFixedSize(300, 150)
-        self.dark_mode_checkbox = QCheckBox("Enable Dark Mode")
-        self.custom_url_label = QLabel("Custom New Tab URL:")
-        self.custom_url_input = QLineEdit(parent.custom_new_tab_url)
-        self.button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        self.button_box.accepted.connect(self.accept)
-        self.button_box.rejected.connect(self.reject)
-        layout = QVBoxLayout()
-        layout.addWidget(self.dark_mode_checkbox)
-        layout.addWidget(self.custom_url_label)
-        layout.addWidget(self.custom_url_input)
-        layout.addWidget(self.button_box)
-        self.setLayout(layout)
-
+    def remove_dark_mode(self):
+        self.setStyleSheet("")
+        self.url_bar.setStyleSheet(
+            "border:1px solid #555; border-radius:10px; padding:5px; color:black; background:white;"
+        )
+        for btn in [self.new_tab_btn, self.refresh_btn, self.fullscreen_btn, self.find_btn, self.download_btn, self.settings_btn]:
+            btn.setStyleSheet("background:transparent; border:none; font-size:16px; color:inherit;")
+        self.tabs.setStyleSheet(
+            "QTabWidget::pane{border:0;}"
+            "QTabBar::tab{border:1px solid #555; border-radius:10px; margin:5px; padding:10px; background:#f0f0f0; color:black;}"
+            "QTabBar::tab:selected{background:#c0c0c0; color:black;}"
+            "QTabBar::tab:hover{background:#d0d0d0;}"
+        )
 
 if __name__ == '__main__':
-    QCoreApplication.setAttribute(Qt.AA_EnableHighDpiScaling)
     app = QApplication(sys.argv)
     app.setApplicationName("Peaks Browser")
     browser = Browser()
     browser.show()
     sys.exit(app.exec_())
+
