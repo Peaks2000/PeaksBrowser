@@ -31,6 +31,3 @@ written in python
 
 <h2>Backstory</h2>
 PeaksBrowser was when my friend Max Showed me that PyQt had a webengine and it was super easy to make a browser in Python. I thought it was pretty cool and decided to try it out!
-
-
-
