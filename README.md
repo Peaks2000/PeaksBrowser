@@ -36,4 +36,3 @@ PeaksBrowser was when my friend Max Showed me that PyQt had a webengine and it w
 
 
 
-
