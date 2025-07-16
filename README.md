@@ -10,6 +10,7 @@
 
 `pip install PyQt5`
 `pip install PyQtWebEngine-Qt5`
+`pip install qtwidgets`
 
 <h1>Features:</h1>
 
