@@ -7,10 +7,11 @@
 
 <h2>To ensure you can run the browser run</h2>
 
-
+`pip install pyqtwebengine`
 `pip install PyQt5`
 `pip install PyQtWebEngine-Qt5`
 `pip install qtwidgets`
+
 
 <h1>Features:</h1>
 
