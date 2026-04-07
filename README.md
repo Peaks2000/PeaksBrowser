@@ -1,7 +1,5 @@
 <h1>Peaks Browser is a lightweight Python and PyQt5 based browser</h1>
-
-<h1>⚠️PeaksBrowser might be rewritten in C++ if I decide to take it seriously⚠️</h1>
-
+this project is so stupid 
 <h2>You must have dependencies installed unless your running the compiled exe</h2>
 
 
